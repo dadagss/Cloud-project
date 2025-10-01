@@ -1,0 +1,8 @@
+/* src/App.css */
+body { font-family: sans-serif; }
+.App { text-align: center; }
+.container { display: flex; justify-content: space-around; padding: 20px; }
+.products-list, .cart { border: 1px solid #ccc; padding: 20px; width: 40%; }
+.product-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+button { padding: 5px 10px; cursor: pointer; }
+.message { margin-top: 15px; font-weight: bold; }
