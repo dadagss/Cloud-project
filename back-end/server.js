@@ -1,4 +1,3 @@
-// server.js (na pasta backend)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -6,7 +5,7 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { Sequelize, DataTypes } = require('sequelize');
 
 // ===================================================================
-// PASSO 1: CONFIGURAÇÃO DO BANCO DE DADOS COM SEQUELIZE
+// CONFIGURAÇÃO DO BANCO DE DADOS COM SEQUELIZE
 // ===================================================================
 const sequelize = new Sequelize(
     process.env.DB_NAME,
@@ -19,9 +18,8 @@ const sequelize = new Sequelize(
 );
 
 // ===================================================================
-// PASSO 2: DEFINIÇÃO DOS MODELOS (TABELAS)
+// DEFINIÇÃO DOS MODELOS (MAPEAMENTO DAS TABELAS)
 // ===================================================================
-// Corresponde à tabela 'products'
 const Product = sequelize.define('Product', {
     product_id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     name: { type: DataTypes.STRING, allowNull: false },
@@ -30,14 +28,12 @@ const Product = sequelize.define('Product', {
     stock_quantity: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }
 }, { timestamps: false, tableName: 'products' });
 
-// Corresponde à tabela 'customers'
 const Customer = sequelize.define('Customer', {
     customer_id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     name: { type: DataTypes.STRING, allowNull: false },
     email: { type: DataTypes.STRING, allowNull: false, unique: true }
 }, { timestamps: false, tableName: 'customers' });
 
-// Corresponde à tabela 'orders'
 const Order = sequelize.define('Order', {
     order_id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     customer_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -45,7 +41,6 @@ const Order = sequelize.define('Order', {
     total_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false }
 }, { timestamps: false, tableName: 'orders' });
 
-// Corresponde à tabela 'order_items'
 const OrderItem = sequelize.define('OrderItem', {
     order_item_id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     order_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -62,23 +57,29 @@ OrderItem.belongsTo(Order, { foreignKey: 'order_id' });
 Product.hasMany(OrderItem, { foreignKey: 'product_id' });
 OrderItem.belongsTo(Product, { foreignKey: 'product_id' });
 
-
 // ===================================================================
-// INICIALIZAÇÃO DO EXPRESS E S3
+// INICIALIZAÇÃO DO EXPRESS E MIDDLEWARES
 // ===================================================================
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// **ALTERAÇÃO IMPORTANTE ABAIXO**
+// Configuração explícita do CORS para permitir requisições do seu frontend
+const corsOptions = {
+  // IMPORTANTE: Substitua o placeholder pelo IP público da sua EC2 do FRONTEND
+  origin: 'http://SEU_IP_PUBLICO_DO_FRONTEND', 
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const s3Client = new S3Client({ region: process.env.AWS_REGION });
 
 // ===================================================================
-// PASSO 3: ROTAS DA API ATUALIZADAS
+// ROTAS DA API
 // ===================================================================
 
-// Rota para listar produtos DIRETAMENTE DO BANCO DE DADOS
 app.get('/api/products', async (req, res) => {
     try {
         const products = await Product.findAll();
@@ -89,44 +90,31 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-// Rota para finalizar a compra, agora com LÓGICA DE BANCO DE DADOS REAL
 app.post('/api/checkout', async (req, res) => {
-    // O frontend agora deve enviar: { name, email, items (array), total }
     const { name, email, items, total } = req.body;
-
     if (!name || !email || !items || !total) {
         return res.status(400).json({ error: 'Dados da compra incompletos.' });
     }
-
     let newOrder;
     try {
-        // Usamos uma transação para garantir que todas as operações no banco de dados
-        // ou funcionem juntas, ou falhem juntas. Isso evita inconsistências.
         await sequelize.transaction(async (t) => {
-            // 1. Encontra ou cria o cliente para não duplicar
             const [customer] = await Customer.findOrCreate({
                 where: { email: email },
                 defaults: { name: name },
                 transaction: t
             });
-
-            // 2. Cria o pedido na tabela 'orders'
             newOrder = await Order.create({
                 customer_id: customer.customer_id,
                 status: 'pendente',
                 total_amount: total
             }, { transaction: t });
-
-            // 3. Cria os itens do pedido na tabela 'order_items'
             for (const item of items) {
                 await OrderItem.create({
                     order_id: newOrder.order_id,
-                    product_id: item.product_id, // Frontend precisa enviar o ID do produto
-                    quantity: item.quantity,       // Frontend precisa enviar a quantidade
+                    product_id: item.product_id,
+                    quantity: item.quantity,
                     unit_price: item.price
                 }, { transaction: t });
-
-                // (Opcional, mas recomendado) Diminuir a quantidade do estoque
                 await Product.decrement('stock_quantity', {
                     by: item.quantity,
                     where: { product_id: item.product_id },
@@ -134,13 +122,11 @@ app.post('/api/checkout', async (req, res) => {
                 });
             }
         });
-
     } catch (dbError) {
         console.error("Erro na transação com o banco de dados:", dbError);
         return res.status(500).json({ error: 'Falha ao salvar o pedido no banco de dados.' });
     }
 
-    // 4. Gerar o recibo e enviar para o S3 (lógica existente)
     const receiptContent = `
         RECIBO DE COMPRA - PEDIDO #${newOrder.order_id}
         ==================================
@@ -162,7 +148,6 @@ app.post('/api/checkout', async (req, res) => {
         });
         await s3Client.send(command);
         console.log(`Recibo ${receiptFileName} enviado com sucesso para o S3!`);
-        
         res.status(201).json({
             message: 'Compra finalizada com sucesso! O recibo será enviado por e-mail.',
             orderId: newOrder.order_id
@@ -173,7 +158,6 @@ app.post('/api/checkout', async (req, res) => {
     }
 });
 
-
 // ===================================================================
 // INICIALIZAÇÃO DO SERVIDOR
 // ===================================================================
@@ -181,9 +165,6 @@ app.listen(PORT, async () => {
     try {
         await sequelize.authenticate();
         console.log('Conexão com o banco de dados estabelecida com sucesso.');
-        // Opcional: sequelize.sync() criaria as tabelas se elas não existissem.
-        // Como você já tem o script SQL, não é estritamente necessário.
-        // await sequelize.sync({ alter: true }); 
         console.log(`Servidor backend rodando na porta ${PORT}`);
     } catch (error) {
         console.error('Não foi possível conectar ao banco de dados:', error);

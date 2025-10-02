@@ -21,7 +21,7 @@ function App() {
     const addToCart = (product) => {
         setCart(prevCart => [...prevCart, product]);
     };
-
+a
     const handleCheckout = async () => {
         if (cart.length === 0) {
             setMessage('Seu carrinho está vazio!');
