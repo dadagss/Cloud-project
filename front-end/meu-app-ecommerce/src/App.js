@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 
 // IMPORTANTE: Altere esta URL para o IP público ou domínio da sua EC2 do Backend
-const API_URL = 'http://SEU_IP_PUBLICO_DA_EC2_BACKEND:3001';
+const API_URL = 'http://54.208.53.53:3001';
 
 function App() {
     const [products, setProducts] = useState([]);
