@@ -63,12 +63,11 @@ OrderItem.belongsTo(Product, { foreignKey: 'product_id' });
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// **ALTERAÇÃO IMPORTANTE ABAIXO**
 // Configuração explícita do CORS para permitir requisições do seu frontend
 const corsOptions = {
-  // IMPORTANTE: Substitua o placeholder pelo IP público da sua EC2 do FRONTEND
-  origin: 'http://SEU_IP_PUBLICO_DO_FRONTEND', 
-  optionsSuccessStatus: 200
+    // IMPORTANTE: Substitua o placeholder pelo IP público da sua EC2 do FRONTEND
+    origin: 'http://SEU_IP_PUBLICO_DO_FRONTEND', 
+    optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
@@ -127,24 +126,29 @@ app.post('/api/checkout', async (req, res) => {
         return res.status(500).json({ error: 'Falha ao salvar o pedido no banco de dados.' });
     }
 
-    const receiptContent = `
-        RECIBO DE COMPRA - PEDIDO #${newOrder.order_id}
-        ==================================
-        Cliente: ${name} (${email})
-        Total: R$ ${total.toFixed(2)}
-        ----------------------------------
-        Itens:
-        ${items.map(item => `- ${item.name} (Qtd: ${item.quantity}) - R$ ${item.price.toFixed(2)}`).join('\n')}
-        ==================================
-    `;
-    const receiptFileName = `recibos/order-${newOrder.order_id}.txt`;
+    // Formatar a string de detalhes do pedido
+    const detailsString = items
+        .map(item => `${item.quantity}x ${item.name}`)
+        .join(', ');
+
+    // Criar o objeto JavaScript para o recibo
+    const receiptObject = {
+        email: email,
+        order_id: newOrder.order_id.toString(),
+        details: detailsString
+    };
+
+    // Converter o objeto para uma string JSON
+    const receiptBody = JSON.stringify(receiptObject, null, 2);
+    const receiptFileName = `recibos/order-${newOrder.order_id}.json`;
 
     try {
+        // Atualizar o comando do S3 com o novo corpo e ContentType
         const command = new PutObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
             Key: receiptFileName,
-            Body: receiptContent,
-            ContentType: 'text/plain'
+            Body: receiptBody,
+            ContentType: 'application/json'
         });
         await s3Client.send(command);
         console.log(`Recibo ${receiptFileName} enviado com sucesso para o S3!`);
