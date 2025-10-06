@@ -63,12 +63,15 @@ OrderItem.belongsTo(Product, { foreignKey: 'product_id' });
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Configuração explícita do CORS para permitir requisições do seu frontend
+// ===================================================================
+// CÓDIGO MODIFICADO ABAIXO
+// ===================================================================
 const corsOptions = {
-    // IMPORTANTE: Substitua o placeholder pelo IP público da sua EC2 do FRONTEND
+    // CORRIGIDO: Permite requisições do IP do seu front-end
     origin: 'http://75.101.220.88', 
     optionsSuccessStatus: 200
 };
+// ===================================================================
 
 app.use(cors(corsOptions));
 app.use(express.json());
@@ -91,7 +94,7 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/checkout', async (req, res) => {
     const { name, email, items, total } = req.body;
-    if (!name || !email || !items || !total) {
+    if (!name || !email || !items || items.length === 0 || !total) {
         return res.status(400).json({ error: 'Dados da compra incompletos.' });
     }
     let newOrder;
@@ -126,24 +129,20 @@ app.post('/api/checkout', async (req, res) => {
         return res.status(500).json({ error: 'Falha ao salvar o pedido no banco de dados.' });
     }
 
-    // Formatar a string de detalhes do pedido
     const detailsString = items
         .map(item => `${item.quantity}x ${item.name}`)
         .join(', ');
 
-    // Criar o objeto JavaScript para o recibo
     const receiptObject = {
         email: email,
         order_id: newOrder.order_id.toString(),
         details: detailsString
     };
 
-    // Converter o objeto para uma string JSON
     const receiptBody = JSON.stringify(receiptObject, null, 2);
     const receiptFileName = `recibos/order-${newOrder.order_id}.json`;
 
     try {
-        // Atualizar o comando do S3 com o novo corpo e ContentType
         const command = new PutObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
             Key: receiptFileName,
