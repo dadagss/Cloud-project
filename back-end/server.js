@@ -66,7 +66,7 @@ const PORT = process.env.PORT || 3001;
 // Configuração explícita do CORS para permitir requisições do seu frontend
 const corsOptions = {
     // IMPORTANTE: Substitua o placeholder pelo IP público da sua EC2 do FRONTEND
-    origin: 'http://SEU_IP_PUBLICO_DO_FRONTEND', 
+    origin: 'http://75.101.220.88', 
     optionsSuccessStatus: 200
 };
 
